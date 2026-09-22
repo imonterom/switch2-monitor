@@ -42,3 +42,15 @@ En **Settings > Secrets and variables > Actions**:
 
 En la pestaña **Actions**, abre **Monitor Nintendo Switch 2**, pulsa **Run workflow**, marca
 **Enviar solo una notificación de prueba a Telegram** y ejecuta el workflow.
+
+
+## Alerta grupal Zelda
+
+El mismo bot también monitorea la **Nintendo Switch 2 - The Legend of Zelda 40.º Aniversario** para el grupo de Telegram "Ofertas".
+
+- Sin límite de precio.
+- Incluye preventas, reposiciones de stock y publicaciones nuevas.
+- No envía al chat privado: va únicamente al grupo.
+- Fuentes directas iniciales: Bestmart, WePlay, Mathogames, Santo Games, TodoJuegos y Mercado Libre.
+- También intenta descubrir nuevas fichas en Falabella, Ripley, Paris, Lider, Hites y ABC.
+- Solo vuelve a avisar cuando una publicación pasa a disponible, cambia de estado o cambia de precio.
