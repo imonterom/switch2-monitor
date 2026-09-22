@@ -23,6 +23,13 @@ GitHub Actions revisa los precios dos veces por hora, a los minutos 07 y 37.
 - Falabella (venta directa)
 - Mercado Libre - Tienda Oficial Nintendo
 - PC Factory mediante páginas públicas de seguimiento de precios de TecnoGangas
+- Paris
+- Ripley
+- Lider
+- Hites
+- ABC
+
+Para estas últimas tiendas se usa SoloTodo como capa de descubrimiento/comparación y se intenta enlazar directamente a la oferta de la tienda.
 
 ## Secrets necesarios
 
