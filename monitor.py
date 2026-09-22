@@ -82,7 +82,7 @@ SOURCES = [
         "title": "Nintendo Switch 2 - Bundle",
         "kind": "bundle",
         "url": "https://www.falabella.com/falabella-cl/product/80774668/consola-nintendo-switch-2-bund-choose",
-        "required_text": "falabella",
+        "required_text": "vendido por falabella",
     },
     {
         "id": "mercadolibre_nintendo_official",
@@ -192,13 +192,14 @@ def fetch_source(source):
     text = " ".join(soup.stripped_strings)
     text_lower = text.lower()
 
-    # Protección contra ediciones o publicaciones que expresamente no interesan.
-    if any(term in text_lower[:3000] for term in EXCLUDED_TERMS):
-        # Solo descartamos cuando el término aparece cerca de la cabecera del producto.
-        # Así no nos afecta una recomendación secundaria de Zelda al final de la página.
-        title_area = text_lower[:1200]
-        if any(term in title_area for term in EXCLUDED_TERMS):
-            return None
+    # Protección contra ediciones/publicaciones que no interesan, mirando solo
+    # el encabezado real del producto para no confundir recomendaciones secundarias.
+    h1 = soup.find("h1")
+    header_text = " ".join(h1.stripped_strings).lower() if h1 else source["title"].lower()
+    source_identity = f"{source['title']} {source['url']} {header_text}".lower()
+    if any(term in source_identity for term in EXCLUDED_TERMS):
+        print(f"[SKIP] {source['store']}: producto excluido por nombre.")
+        return None
 
     required = source.get("required_text")
     if required and required.lower() not in text_lower:
@@ -210,7 +211,7 @@ def fetch_source(source):
         print(f"[SKIP] {source['store']}: producto agotado.")
         return None
 
-    prices = extract_prices(text)
+    prices = extract_primary_prices(source, soup, text)
     if not prices:
         raise RuntimeError("No se encontró un precio de consola válido.")
 
