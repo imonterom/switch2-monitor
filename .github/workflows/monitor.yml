@@ -1,0 +1,59 @@
+name: Monitor Nintendo Switch 2
+
+on:
+  schedule:
+    # Dos revisiones por hora, evitando el minuto 00 para reducir retrasos de GitHub Actions.
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_notification:
+        description: "Enviar solo una notificación de prueba a Telegram"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: switch2-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Revisar precios
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_NOTIFICATION: ${{ github.event_name == 'workflow_dispatch' && inputs.test_notification || 'false' }}
+        run: python monitor.py
+
+      - name: Guardar estado para no repetir alertas
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.test_notification }}
+        run: |
+          if git diff --quiet -- state.json && git diff --cached --quiet -- state.json; then
+            echo "Sin cambios de estado."
+            exit 0
+          fi
+
+          git config user.name "switch2-monitor[bot]"
+          git config user.email "switch2-monitor[bot]@users.noreply.github.com"
+          git add state.json
+          git commit -m "chore: actualizar estado de precios"
+          git push
