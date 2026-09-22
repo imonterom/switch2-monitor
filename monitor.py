@@ -14,6 +14,7 @@ STATE_FILE = Path("state.json")
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+ZELDA_GROUP_ID = "-5304374891"
 TEST_NOTIFICATION = os.environ.get("TEST_NOTIFICATION", "false").lower() in {"1", "true", "yes"}
 
 HEADERS = {
@@ -134,6 +135,55 @@ SOLOTODO_PRODUCTS = [
 # directamente en SOURCES para evitar alertas duplicadas.
 SOLOTODO_STORES = ("Paris", "Ripley", "Lider", "Hites", "ABC")
 
+ZELDA_SOURCES = [
+    {
+        "id": "zelda_bestmart",
+        "store": "Bestmart",
+        "title": "Nintendo Switch 2 - The Legend of Zelda 40.º Aniversario",
+        "url": "https://bestmart.cl/collections/preventas-exclusivas-bestmart-chile/products/consola-nintendo-switch-2-the-legend-of-zelda-edicion-40-aniversario",
+    },
+    {
+        "id": "zelda_weplay",
+        "store": "WePlay",
+        "title": "Nintendo Switch 2 - The Legend of Zelda 40TH Aniversario",
+        "url": "https://www.weplay.cl/preventa-consola-switch-2-the-legend-of-zelda-40th-aniversario.html",
+    },
+    {
+        "id": "zelda_mathogames",
+        "store": "Mathogames",
+        "title": "Nintendo Switch 2 - The Legend of Zelda 40TH Anniversary",
+        "url": "https://www.mathogames.cl/consolas-switch-2/2538-preventa-dia-1-consola-nintendo-switch-2-the-legend-of-zelda-40th-anniversary.html",
+    },
+    {
+        "id": "zelda_santogames",
+        "store": "Santo Games",
+        "title": "Nintendo Switch 2 - The Legend of Zelda 40.º Aniversario",
+        "url": "https://www.santogames.cl/nintendo-switch-2-the-legend-of-zelda-40%C2%BA-aniversario",
+    },
+    {
+        "id": "zelda_todojuegos",
+        "store": "TodoJuegos",
+        "title": "Nintendo Switch 2 - Zelda 40TH Aniversario",
+        "url": "https://www.todojuegos.cl/Productos/NS2/Consola-Switch-2-Zelda-40th-Aniversario/",
+    },
+    {
+        "id": "zelda_mercadolibre",
+        "store": "Mercado Libre",
+        "title": "Nintendo Switch 2 - The Legend of Zelda 40TH Anniversary Edition",
+        "url": "https://www.mercadolibre.cl/nintendo-switch-2-the-legend-of-zelda-40th-anniversary-edition/p/MLC79375219",
+    },
+]
+
+# Capa de descubrimiento para detectar nuevas fichas en retailers grandes.
+ZELDA_DISCOVERY_PAGES = [
+    ("Falabella", "https://www.falabella.com/falabella-cl/search?Ntt=nintendo%20switch%202%20zelda%2040"),
+    ("Ripley", "https://simple.ripley.cl/search/nintendo%20switch%202%20zelda%2040"),
+    ("Paris", "https://www.paris.cl/search?q=nintendo%20switch%202%20zelda%2040"),
+    ("Lider", "https://www.lider.cl/catalogo/search?query=nintendo%20switch%202%20zelda%2040"),
+    ("Hites", "https://www.hites.com/search?q=nintendo%20switch%202%20zelda%2040"),
+    ("ABC", "https://www.abc.cl/search?q=nintendo%20switch%202%20zelda%2040"),
+]
+
 EXCLUDED_TERMS = (
     "preventa",
     "pre-venta",
@@ -168,14 +218,14 @@ def format_clp(value):
     return "$" + f"{value:,}".replace(",", ".")
 
 
-def send_telegram(message):
-    if not BOT_TOKEN or not CHAT_ID:
-        raise RuntimeError("Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID.")
+def send_telegram_to(chat_id, message):
+    if not BOT_TOKEN or not chat_id:
+        raise RuntimeError("Falta TELEGRAM_BOT_TOKEN o el chat_id de destino.")
 
     response = requests.post(
         f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
         json={
-            "chat_id": CHAT_ID,
+            "chat_id": chat_id,
             "text": message,
             "parse_mode": "HTML",
             "disable_web_page_preview": False,
@@ -311,6 +361,178 @@ def fetch_solotodo_offers(product):
     return offers
 
 
+
+def extract_product_title(soup, fallback):
+    h1 = soup.find("h1")
+    if h1:
+        title = " ".join(h1.stripped_strings).strip()
+        if title:
+            return title
+    meta = soup.find("meta", attrs={"property": "og:title"})
+    if meta and meta.get("content"):
+        return meta["content"].strip()
+    return fallback
+
+
+def zelda_product_matches(title):
+    value = title.lower()
+    return (
+        "switch 2" in value
+        and "zelda" in value
+        and ("40" in value or "aniversario" in value or "anniversary" in value)
+        and ("consola" in value or "nintendo switch 2" in value)
+    )
+
+
+def zelda_availability(text):
+    value = text.lower()
+
+    unavailable_terms = (
+        "fuera de stock",
+        "agotado",
+        "producto agotado",
+        "no está disponible",
+        "no esta disponible",
+        "producto no disponible",
+        "este producto no está disponible",
+        "este producto no esta disponible",
+        "temporalmente agotado",
+        "precio x confirmar",
+        "este producto no tendrá preventa",
+        "este producto no tendra preventa",
+    )
+    if any(term in value for term in unavailable_terms):
+        return False, "SIN STOCK"
+
+    if "disponible solo en tienda" in value:
+        return True, "DISPONIBLE EN TIENDA"
+    if "preventa" in value or "pre-venta" in value:
+        return True, "PREVENTA"
+    if any(term in value for term in ("agregar al carro", "agregar al carrito", "añadir al carrito", "comprar ahora")):
+        return True, "DISPONIBLE"
+
+    return True, "PUBLICACIÓN ACTIVA"
+
+
+def fetch_zelda_source(source):
+    response = requests.get(source["url"], headers=HEADERS, timeout=25)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    text = " ".join(soup.stripped_strings)
+    title = extract_product_title(soup, source["title"])
+
+    if not zelda_product_matches(title):
+        raise RuntimeError(f"La página ya no parece corresponder a la consola Zelda: {title}")
+
+    available, status = zelda_availability(text)
+    prices = extract_primary_prices(source, soup, text)
+    price = min(prices) if prices else None
+
+    return {
+        "available": available,
+        "status": status,
+        "price": price,
+        "url": source["url"],
+        "title": title,
+    }
+
+
+def discover_zelda_sources():
+    discovered = []
+    seen = set()
+
+    for store, search_url in ZELDA_DISCOVERY_PAGES:
+        try:
+            response = requests.get(search_url, headers=HEADERS, timeout=20)
+            response.raise_for_status()
+        except Exception as exc:
+            print(f"[INFO] Descubrimiento Zelda {store}: {exc}")
+            continue
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        for anchor in soup.find_all("a", href=True):
+            label = " ".join(anchor.stripped_strings).strip()
+            if not label or not zelda_product_matches(label):
+                continue
+
+            url = urljoin(search_url, anchor["href"])
+            key = (store, url)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            discovered.append(
+                {
+                    "id": f"zelda_discovered_{slugify(store)}_{abs(hash(url))}",
+                    "store": store,
+                    "title": label,
+                    "url": url,
+                }
+            )
+
+    return discovered
+
+
+def build_zelda_alert(source, result):
+    price_line = (
+        f"💰 <b>{format_clp(result['price'])}</b>\n"
+        if result.get("price") is not None
+        else "💰 Precio no confirmado\n"
+    )
+    return (
+        "🗡️ <b>SWITCH 2 ZELDA DISPONIBLE</b>\n\n"
+        f"🎮 <b>{html.escape(result.get('title') or source['title'])}</b>\n"
+        f"🏪 {html.escape(source['store'])}\n"
+        f"📌 <b>{html.escape(result['status'])}</b>\n"
+        f"{price_line}"
+        "⚡ Revisen rápido: esta edición puede agotar stock/preventa.\n\n"
+        f"🔗 <a href=\"{html.escape(result['url'], quote=True)}\">Ver publicación</a>"
+    )
+
+
+def process_zelda_sources(state, new_state):
+    sources = ZELDA_SOURCES + discover_zelda_sources()
+
+    for source in sources:
+        source_id = source["id"]
+        try:
+            result = fetch_zelda_source(source)
+        except Exception as exc:
+            print(f"[ERROR] Zelda {source['store']}: {exc}")
+            continue
+
+        previous = state.get(source_id, {})
+        was_available = bool(previous.get("available"))
+        previous_price = previous.get("last_price")
+        available = bool(result["available"])
+        price = result.get("price")
+
+        print(
+            f"[ZELDA] {source['store']}: {result['status']} "
+            f"{format_clp(price) if price is not None else 'sin precio'}"
+        )
+
+        record = {
+            "available": available,
+            "last_price": price,
+            "last_url": result["url"],
+            "last_status": result["status"],
+        }
+
+        should_alert = available and (
+            not was_available
+            or previous_price != price
+            or previous.get("last_status") != result["status"]
+        )
+
+        if should_alert:
+            send_telegram_to(ZELDA_GROUP_ID, build_zelda_alert(source, result))
+            print("  -> ALERTA ZELDA ENVIADA AL GRUPO")
+
+        new_state[source_id] = record
+
+
 def threshold_for(source):
     return BUNDLE_LIMIT if source["kind"] == "bundle" else STANDARD_LIMIT
 
@@ -338,9 +560,16 @@ def main():
             "La automatización de GitHub ya puede enviarte alertas por Telegram.\n"
             f"🎮 Consola: {format_clp(STANDARD_LIMIT)} o menos\n"
             f"📦 Bundle: {format_clp(BUNDLE_LIMIT)} o menos\n"
-            "🚫 Preventas y Zelda excluidos."
+            "🚫 Preventas y Zelda excluidos de tu alerta privada."
         )
-        print("Notificación de prueba enviada.")
+        send_telegram_to(
+            ZELDA_GROUP_ID,
+            "🗡️ <b>Prueba monitor Switch 2 Zelda</b>\n\n"
+            "Este grupo recibirá alertas de preventa, reposición o nueva disponibilidad "
+            "de la Nintendo Switch 2 The Legend of Zelda 40.º Aniversario.\n"
+            "🔗 Las alertas incluirán enlace directo a la publicación."
+        )
+        print("Notificaciones de prueba enviadas.")
         return
 
     state = load_state()
@@ -403,6 +632,8 @@ def main():
 
         for offer in offers:
             process_offer(offer, offer["price"], offer["url"])
+
+    process_zelda_sources(state, new_state)
 
     save_state(new_state)
 
