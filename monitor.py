@@ -244,7 +244,7 @@ def normalize_price(raw):
     if raw is None:
         return None
 
-    digits = re.sub(r"\\D", "", str(raw))
+    digits = re.sub(r"\D", "", str(raw))
     if not digits:
         return None
 
@@ -276,7 +276,7 @@ def extract_primary_prices(source, soup, text):
     # TecnoGangas muestra explícitamente "Oferta $X".
     if "tecnogangas.cl" in source["url"]:
         match = re.search(
-            r"Oferta\\s*(?:CLP\\s*)?\\$\\s*([0-9]{1,3}(?:[.\\s][0-9]{3})+)",
+            r"Oferta\s*(?:CLP\s*)?\$\s*([0-9]{1,3}(?:[.\s][0-9]{3})+)",
             text,
             flags=re.I,
         )
@@ -714,6 +714,7 @@ def main():
         limit = threshold_for(source)
         previous = state.get(source_id, {})
         previous_alerted = previous.get("last_alerted_price")
+        previous_alerted_url = previous.get("last_alerted_url")
 
         print(
             f"[OK] {source['store']} / {source['title']}: "
@@ -724,17 +725,22 @@ def main():
             "last_price": price,
             "last_url": url,
             "last_alerted_price": previous_alerted,
+            "last_alerted_url": previous_alerted_url,
         }
 
         if price <= limit:
-            if previous_alerted != price:
+            if previous_alerted != price or previous_alerted_url != url:
                 send_telegram(build_alert(source, price, url))
                 record["last_alerted_price"] = price
+                record["last_alerted_url"] = url
                 print("  -> ALERTA ENVIADA")
             else:
-                print("  -> Oferta ya avisada; no se repite.")
+                print("  -> Misma oferta ya avisada; no se repite.")
         else:
+            # Si deja de cumplir el umbral, la próxima vez que vuelva a entrar
+            # en oferta se considera un nuevo evento y puede avisarse otra vez.
             record["last_alerted_price"] = None
+            record["last_alerted_url"] = None
 
         new_state[source_id] = record
 
