@@ -236,6 +236,91 @@ def send_telegram_to(chat_id, message):
     response.raise_for_status()
 
 
+def send_telegram(message):
+    send_telegram_to(CHAT_ID, message)
+
+
+def normalize_price(raw):
+    if raw is None:
+        return None
+
+    digits = re.sub(r"\\D", "", str(raw))
+    if not digits:
+        return None
+
+    value = int(digits)
+    if 450_000 <= value <= 1_200_000:
+        return value
+    return None
+
+
+def walk_json_prices(node):
+    values = []
+
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key.lower() in {"price", "lowprice", "highprice"}:
+                parsed = normalize_price(value)
+                if parsed is not None:
+                    values.append(parsed)
+            values.extend(walk_json_prices(value))
+
+    elif isinstance(node, list):
+        for value in node:
+            values.extend(walk_json_prices(value))
+
+    return values
+
+
+def extract_primary_prices(source, soup, text):
+    # TecnoGangas muestra explícitamente "Oferta $X".
+    if "tecnogangas.cl" in source["url"]:
+        match = re.search(
+            r"Oferta\\s*(?:CLP\\s*)?\\$\\s*([0-9]{1,3}(?:[.\\s][0-9]{3})+)",
+            text,
+            flags=re.I,
+        )
+        if match:
+            value = normalize_price(match.group(1))
+            if value is not None:
+                return [value]
+
+    structured = []
+
+    for selector in (
+        'meta[property="product:price:amount"]',
+        'meta[property="og:price:amount"]',
+        'meta[itemprop="price"]',
+    ):
+        for meta in soup.select(selector):
+            value = normalize_price(meta.get("content"))
+            if value is not None:
+                structured.append(value)
+
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = script.string or script.get_text(strip=True)
+        if not raw:
+            continue
+
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+
+        structured.extend(walk_json_prices(data))
+
+    if structured:
+        return sorted(set(structured))
+
+    main = soup.find("main")
+    scoped_text = " ".join(main.stripped_strings) if main else text
+    prices = extract_prices(scoped_text)
+    if prices:
+        return prices
+
+    return extract_prices(text)
+
+
 def extract_prices(text):
     # Detecta formatos chilenos típicos: $569.990, CLP$ 569.990, etc.
     matches = re.findall(r"(?:CLP\s*)?\$\s*([0-9]{1,3}(?:[.\s][0-9]{3})+)", text, flags=re.I)
