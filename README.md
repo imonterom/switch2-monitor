@@ -12,7 +12,7 @@ Monitor personal de precios para Nintendo Switch 2 en Chile.
 
 ## Frecuencia
 
-GitHub Actions revisa los precios dos veces por hora, a los minutos 07 y 37.
+GitHub Actions revisa los precios cada 10 minutos, a los minutos 07, 17, 27, 37, 47 y 57.
 
 > GitHub puede retrasar ocasionalmente los workflows programados. La revisión no es tiempo real al segundo.
 
@@ -54,3 +54,11 @@ El mismo bot también monitorea la **Nintendo Switch 2 - The Legend of Zelda 40.
 - Fuentes directas iniciales: Bestmart, WePlay, Mathogames, Santo Games, TodoJuegos y Mercado Libre.
 - También intenta descubrir nuevas fichas en Falabella, Ripley, Paris, Lider, Hites y ABC.
 - Solo vuelve a avisar cuando una publicación pasa a disponible, cambia de estado o cambia de precio.
+
+
+## Antispam
+
+El monitor guarda estado en `state.json`. No repite la misma oferta en cada ejecución:
+- misma tienda + misma publicación + mismo precio: se avisa una sola vez;
+- si deja de cumplir el umbral y más adelante vuelve a entrar en oferta, puede avisarse nuevamente;
+- para Zelda, solo se vuelve a avisar si cambia disponibilidad, estado o precio.
