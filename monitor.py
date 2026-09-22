@@ -3,6 +3,7 @@ import json
 import os
 import re
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -107,6 +108,31 @@ SOURCES = [
         "url": "https://tecnogangas.cl/producto/39223-nintendo-switch-2-formato-us-256gb-12gb-ram-7-9-tela-lcd-fhd-usb-c-wi-fi-5220-mah-bluetooth-4-1",
     },
 ]
+
+SOLOTODO_PRODUCTS = [
+    {
+        "id": "solotodo_standard",
+        "title": "Nintendo Switch 2",
+        "kind": "standard",
+        "url": "https://www.solotodo.cl/products/273115-nintendo-switch-2-black",
+    },
+    {
+        "id": "solotodo_mario_bundle",
+        "title": "Nintendo Switch 2 + Mario Kart World",
+        "kind": "bundle",
+        "url": "https://www.solotodo.cl/products/273116-nintendo-switch-2-black-mario-kart-world",
+    },
+    {
+        "id": "solotodo_choose_bundle",
+        "title": "Nintendo Switch 2 - Choose Your Game",
+        "kind": "bundle",
+        "url": "https://www.solotodo.cl/products/396411-nintendo-switch-2-black-choose-your-game",
+    },
+]
+
+# Tiendas grandes que agregamos mediante SoloTodo. Las demás ya se siguen
+# directamente en SOURCES para evitar alertas duplicadas.
+SOLOTODO_STORES = ("Paris", "Ripley", "Lider", "Hites", "ABC")
 
 EXCLUDED_TERMS = (
     "preventa",
@@ -225,6 +251,66 @@ def fetch_source(source):
     }
 
 
+
+def slugify(value):
+    value = value.lower().strip()
+    value = re.sub(r"[^a-z0-9]+", "_", value)
+    return value.strip("_")
+
+
+def normalize_solotodo_link(href, base_url):
+    href = urljoin(base_url, href)
+    parsed = urlparse(href)
+    query = parse_qs(parsed.query)
+
+    # SoloTodo usa algunos enlaces de redirección/afiliado. Extraemos la URL
+    # final cuando viene explícita en el parámetro.
+    for key in ("url", "dl"):
+        if key in query and query[key]:
+            target = unquote(query[key][0])
+            if target.startswith("http://") or target.startswith("https://"):
+                return target
+
+    return href
+
+
+def fetch_solotodo_offers(product):
+    response = requests.get(product["url"], headers=HEADERS, timeout=25)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    offers = []
+
+    for anchor in soup.find_all("a", href=True):
+        label = " ".join(anchor.stripped_strings).strip()
+        label_lower = label.lower()
+
+        store = next(
+            (name for name in SOLOTODO_STORES if label_lower.startswith(name.lower())),
+            None,
+        )
+        if not store:
+            continue
+
+        prices = extract_prices(label)
+        if not prices:
+            continue
+
+        price = min(prices)
+        offers.append(
+            {
+                "id": f"{product['id']}_{slugify(store)}",
+                "store": store,
+                "title": product["title"],
+                "kind": product["kind"],
+                "price": price,
+                "url": normalize_solotodo_link(anchor["href"], product["url"]),
+            }
+        )
+
+    return offers
+
+
 def threshold_for(source):
     return BUNDLE_LIMIT if source["kind"] == "bundle" else STANDARD_LIMIT
 
@@ -260,21 +346,9 @@ def main():
     state = load_state()
     new_state = dict(state)
 
-    for source in SOURCES:
+    def process_offer(source, price, url):
         source_id = source["id"]
         limit = threshold_for(source)
-
-        try:
-            result = fetch_source(source)
-        except Exception as exc:
-            print(f"[ERROR] {source['store']} / {source['title']}: {exc}")
-            continue
-
-        if result is None:
-            continue
-
-        price = result["price"]
-        url = result["url"]
         previous = state.get(source_id, {})
         previous_alerted = previous.get("last_alerted_price")
 
@@ -290,7 +364,6 @@ def main():
         }
 
         if price <= limit:
-            # Avisa al entrar bajo el umbral o si aparece un precio distinto.
             if previous_alerted != price:
                 send_telegram(build_alert(source, price, url))
                 record["last_alerted_price"] = price
@@ -298,10 +371,38 @@ def main():
             else:
                 print("  -> Oferta ya avisada; no se repite.")
         else:
-            # Si vuelve a subir, permitimos alertar de nuevo si más adelante vuelve a bajar.
             record["last_alerted_price"] = None
 
         new_state[source_id] = record
+
+    # Fuentes directas.
+    for source in SOURCES:
+        try:
+            result = fetch_source(source)
+        except Exception as exc:
+            print(f"[ERROR] {source['store']} / {source['title']}: {exc}")
+            continue
+
+        if result is None:
+            continue
+
+        process_offer(source, result["price"], result["url"])
+
+    # Segunda capa: SoloTodo permite descubrir cambios en Paris, Ripley,
+    # Lider, Hites y ABC sin depender de una URL fija para cada retailer.
+    for product in SOLOTODO_PRODUCTS:
+        try:
+            offers = fetch_solotodo_offers(product)
+        except Exception as exc:
+            print(f"[ERROR] SoloTodo / {product['title']}: {exc}")
+            continue
+
+        if not offers:
+            print(f"[INFO] SoloTodo / {product['title']}: sin ofertas de tiendas objetivo visibles.")
+            continue
+
+        for offer in offers:
+            process_offer(offer, offer["price"], offer["url"])
 
     save_state(new_state)
 
