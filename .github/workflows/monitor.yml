@@ -47,7 +47,7 @@ jobs:
       - name: Guardar estado para no repetir alertas
         if: ${{ github.event_name != 'workflow_dispatch' || !inputs.test_notification }}
         run: |
-          if git diff --quiet -- state.json && git diff --cached --quiet -- state.json; then
+          if [ -z "$(git status --porcelain -- state.json)" ]; then
             echo "Sin cambios de estado."
             exit 0
           fi
