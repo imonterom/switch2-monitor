@@ -1,3 +1,4 @@
+import hashlib
 import html
 import json
 import os
@@ -384,6 +385,50 @@ def zelda_product_matches(title):
     )
 
 
+def collect_json_availability(node):
+    values = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key.lower() == "availability" and isinstance(value, str):
+                values.append(value.lower())
+            values.extend(collect_json_availability(value))
+    elif isinstance(node, list):
+        for value in node:
+            values.extend(collect_json_availability(value))
+    return values
+
+
+def structured_availability(soup):
+    values = []
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = script.string or script.get_text(strip=True)
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        values.extend(collect_json_availability(data))
+
+    if any(
+        marker in value
+        for value in values
+        for marker in ("outofstock", "soldout", "discontinued")
+    ):
+        return False, "SIN STOCK"
+
+    if any(
+        marker in value
+        for value in values
+        for marker in ("instock", "preorder", "presale", "limitedavailability")
+    ):
+        if any("preorder" in value or "presale" in value for value in values):
+            return True, "PREVENTA"
+        return True, "DISPONIBLE"
+
+    return None
+
+
 def zelda_availability(text):
     value = text.lower()
 
@@ -425,7 +470,11 @@ def fetch_zelda_source(source):
     if not zelda_product_matches(title):
         raise RuntimeError(f"La página ya no parece corresponder a la consola Zelda: {title}")
 
-    available, status = zelda_availability(text)
+    structured = structured_availability(soup)
+    if structured is not None:
+        available, status = structured
+    else:
+        available, status = zelda_availability(text)
     prices = extract_primary_prices(source, soup, text)
     price = min(prices) if prices else None
 
@@ -464,7 +513,7 @@ def discover_zelda_sources():
 
             discovered.append(
                 {
-                    "id": f"zelda_discovered_{slugify(store)}_{abs(hash(url))}",
+                    "id": f"zelda_discovered_{slugify(store)}_{hashlib.sha1(url.encode('utf-8')).hexdigest()[:12]}",
                     "store": store,
                     "title": label,
                     "url": url,
