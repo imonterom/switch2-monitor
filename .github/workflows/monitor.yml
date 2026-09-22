@@ -2,8 +2,8 @@ name: Monitor Nintendo Switch 2
 
 on:
   schedule:
-    # Dos revisiones por hora, evitando el minuto 00 para reducir retrasos de GitHub Actions.
-    - cron: "7,37 * * * *"
+    # Revisión cada 10 minutos, desplazada del minuto 00 para reducir retrasos.
+    - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch:
     inputs:
       test_notification:
