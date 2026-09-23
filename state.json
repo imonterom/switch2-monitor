@@ -1,1 +1,80 @@
-{}
+{
+  "bestmart_choose_bundle": {
+    "last_alerted_price": null,
+    "last_alerted_url": null,
+    "last_price": 619990,
+    "last_url": "https://bestmart.cl/collections/recien-llegados/products/consola-nintendo-switch-2-bundle-elige-tu-juego"
+  },
+  "bestmart_standard": {
+    "last_alerted_price": null,
+    "last_alerted_url": null,
+    "last_price": 569990,
+    "last_url": "https://bestmart.cl/collections/consolas-nintendo-switch/products/consola-nintendo-switch-2-negro"
+  },
+  "falabella_standard": {
+    "last_alerted_price": null,
+    "last_alerted_url": null,
+    "last_price": 609990,
+    "last_url": "https://www.falabella.com/falabella-cl/product/17448346/Nintendo-Switch-2"
+  },
+  "pcfactory_switch2_56565": {
+    "last_alerted_price": null,
+    "last_alerted_url": null,
+    "last_price": 579990,
+    "last_url": "https://www.pcfactory.cl/producto/56565-nintendo-nintendo-switch-2-256gb-12gb-ram-7-9--tela-lcd-fhd-usb-c-wi-fi-5220-mah-bluetooth-4-1"
+  },
+  "pcfactory_switch2_us_56075": {
+    "last_alerted_price": null,
+    "last_alerted_url": null,
+    "last_price": 564990,
+    "last_url": "https://www.pcfactory.cl/producto/56075-nintendo-nintendo-switch-2-formato-us-256gb-12gb-ram-7-9--tela-lcd-fhd-usb-c-wi-fi-5220-mah-bluetooth-4-1"
+  },
+  "solotodo_choose_bundle_lider": {
+    "last_alerted_price": null,
+    "last_alerted_url": null,
+    "last_price": 649990,
+    "last_url": "https://www.lider.cl/ip/videojuegos/consola-nintendo-switch-2-elige-tu-juego/00004549688667"
+  },
+  "solotodo_choose_bundle_paris": {
+    "last_alerted_price": null,
+    "last_alerted_url": null,
+    "last_price": 669990,
+    "last_url": "https://www.paris.cl/consola-nintendo-switch-2-choose-your-game-bundle-505778999.html"
+  },
+  "solotodo_mario_bundle_lider": {
+    "last_alerted_price": null,
+    "last_alerted_url": null,
+    "last_price": 624990,
+    "last_url": "https://www.lider.cl/ip/videojuegos/consola-nintendo-switch-2-mario-kart-world-256gb-nintendo/00004549688563"
+  },
+  "solotodo_standard_paris": {
+    "last_alerted_price": null,
+    "last_alerted_url": null,
+    "last_price": 599990,
+    "last_url": "https://www.paris.cl/consola-nintendo-switch-2-142747999.html"
+  },
+  "zelda_bestmart": {
+    "available": false,
+    "last_price": 669990,
+    "last_status": "SIN STOCK",
+    "last_url": "https://bestmart.cl/collections/preventas-exclusivas-bestmart-chile/products/consola-nintendo-switch-2-the-legend-of-zelda-edicion-40-aniversario"
+  },
+  "zelda_mercadolibre": {
+    "available": true,
+    "last_price": null,
+    "last_status": "PUBLICACIÓN ACTIVA",
+    "last_url": "https://www.mercadolibre.cl/nintendo-switch-2-the-legend-of-zelda-40th-anniversary-edition/p/MLC79375219"
+  },
+  "zelda_santogames": {
+    "available": false,
+    "last_price": null,
+    "last_status": "SIN STOCK",
+    "last_url": "https://www.santogames.cl/nintendo-switch-2-the-legend-of-zelda-40%C2%BA-aniversario"
+  },
+  "zelda_todojuegos": {
+    "available": false,
+    "last_price": 669900,
+    "last_status": "SIN STOCK",
+    "last_url": "https://www.todojuegos.cl/Productos/NS2/Consola-Switch-2-Zelda-40th-Aniversario/"
+  }
+}
