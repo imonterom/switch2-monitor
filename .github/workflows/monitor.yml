@@ -1,9 +1,20 @@
 name: Monitor Nintendo Switch 2
 
 on:
+  # El cron solo arranca/refresca el watcher. La cadencia real de 10 minutos
+  # la controla el loop del job, evitando depender del scheduler de GitHub.
   schedule:
-    # Revisión cada 10 minutos, desplazada del minuto 00 para reducir retrasos.
-    - cron: "7,17,27,37,47,57 * * * *"
+    - cron: "13 * * * *"
+
+  # Cuando cambiamos el código, inicia inmediatamente una nueva instancia.
+  push:
+    branches:
+      - main
+    paths:
+      - "monitor.py"
+      - "requirements.txt"
+      - ".github/workflows/monitor.yml"
+
   workflow_dispatch:
     inputs:
       test_notification:
@@ -17,16 +28,20 @@ permissions:
 
 concurrency:
   group: switch2-monitor
-  cancel-in-progress: false
+  # Si GitHub sí dispara el cron horario, reemplaza el watcher anterior.
+  # Si se retrasa, el watcher anterior sigue revisando cada 10 minutos.
+  cancel-in-progress: true
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 355
 
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -37,23 +52,47 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r requirements.txt
 
-      - name: Revisar precios
+      - name: Prueba de Telegram
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.test_notification }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TEST_NOTIFICATION: ${{ github.event_name == 'workflow_dispatch' && inputs.test_notification || 'false' }}
+          TEST_NOTIFICATION: "true"
         run: python monitor.py
 
-      - name: Guardar estado para no repetir alertas
+      - name: Vigilar precios cada 10 minutos
         if: ${{ github.event_name != 'workflow_dispatch' || !inputs.test_notification }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_NOTIFICATION: "false"
         run: |
-          if [ -z "$(git status --porcelain -- state.json)" ]; then
-            echo "Sin cambios de estado."
-            exit 0
-          fi
-
           git config user.name "switch2-monitor[bot]"
           git config user.email "switch2-monitor[bot]@users.noreply.github.com"
-          git add state.json
-          git commit -m "chore: actualizar estado de precios"
-          git push
+
+          # 33 ciclos ~= 5 h 30 min. El cron horario normalmente reinicia
+          # el watcher antes; si GitHub se retrasa, este sigue funcionando.
+          for i in $(seq 1 33); do
+            echo "============================================================"
+            echo "Ciclo $i/33 - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            START=$(date +%s)
+
+            python monitor.py || echo "El ciclo tuvo errores parciales; se continuará."
+
+            # Persistimos el estado en cada ciclo para impedir alertas duplicadas
+            # incluso si GitHub cancela/reinicia este job.
+            if [ -n "$(git status --porcelain -- state.json)" ]; then
+              git add state.json
+              git commit -m "chore: actualizar estado de precios" || true
+              git pull --rebase origin main || true
+              git push || true
+            fi
+
+            END=$(date +%s)
+            ELAPSED=$((END - START))
+            WAIT=$((600 - ELAPSED))
+            if [ "$WAIT" -gt 0 ]; then
+              echo "Próxima revisión en $WAIT segundos."
+              sleep "$WAIT"
+            fi
+          done
