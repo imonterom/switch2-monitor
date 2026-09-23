@@ -136,6 +136,13 @@ SOLOTODO_PRODUCTS = [
 # directamente en SOURCES para evitar alertas duplicadas.
 SOLOTODO_STORES = ("Paris", "Ripley", "Lider", "Hites", "ABC")
 
+# Falabella funciona además como marketplace. Esta capa revisa el catálogo
+# completo para no perder ofertas de vendedores como Spice Mobile o Bestmart.
+FALABELLA_MARKETPLACE_URL = (
+    "https://www.falabella.com/falabella-cl/shop/nintendo-switch-online"
+)
+
+
 ZELDA_SOURCES = [
     {
         "id": "zelda_bestmart",
@@ -448,6 +455,95 @@ def fetch_solotodo_offers(product):
 
 
 
+def canonical_product_url(url):
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+
+
+def extract_falabella_seller(text):
+    # Los cards suelen verse como "... Por Spice Mobile $ 529.990 ..."
+    match = re.search(
+        r"\bPor\s+(.+?)(?=\s+\$\s*[0-9]|\s+-[0-9]+%|\s+Agregar al Carro|$)",
+        text,
+        flags=re.I,
+    )
+    if not match:
+        return "Marketplace"
+
+    seller = re.sub(r"\s+", " ", match.group(1)).strip(" .-|")
+    return seller[:60] if seller else "Marketplace"
+
+
+def fetch_falabella_marketplace_offers():
+    response = requests.get(FALABELLA_MARKETPLACE_URL, headers=HEADERS, timeout=25)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    offers = {}
+    for anchor in soup.find_all("a", href=True):
+        href = anchor.get("href", "")
+        if "/product/" not in href:
+            continue
+
+        label_parts = list(anchor.stripped_strings)
+        for image in anchor.find_all("img"):
+            alt = (image.get("alt") or "").strip()
+            if alt:
+                label_parts.append(alt)
+
+        label = " ".join(label_parts).strip()
+        product_url = canonical_product_url(urljoin(FALABELLA_MARKETPLACE_URL, href))
+
+        # Subimos por el card hasta encontrar el bloque que contiene producto + precio.
+        node = anchor
+        card_text = label
+        for _ in range(8):
+            node = node.parent
+            if node is None:
+                break
+            candidate = " ".join(node.stripped_strings)
+            candidate_lower = candidate.lower()
+            if "switch 2" in candidate_lower and extract_prices(candidate):
+                card_text = candidate
+                break
+
+        text_lower = card_text.lower()
+        if "switch 2" not in text_lower:
+            continue
+        if any(term in text_lower for term in ("reacondicionado", "reacondicionada", "usado", "usada", "zelda")):
+            continue
+
+        prices = extract_prices(card_text)
+        if not prices:
+            continue
+        price = min(prices)
+
+        kind = (
+            "bundle"
+            if any(term in text_lower for term in ("bundle", "bund", "mario kart", "choose your game", "elige tu juego"))
+            else "standard"
+        )
+        seller = extract_falabella_seller(card_text)
+
+        # Título compacto para Telegram.
+        title = label or "Nintendo Switch 2"
+        title = re.sub(r"\s+", " ", title).strip()
+        if len(title) > 100:
+            title = "Nintendo Switch 2" + (" Bundle" if kind == "bundle" else "")
+
+        offer_id = hashlib.sha1(product_url.encode("utf-8")).hexdigest()[:16]
+        offers[product_url] = {
+            "id": f"falabella_marketplace_{offer_id}",
+            "store": f"Falabella / {seller}",
+            "title": title,
+            "kind": kind,
+            "price": price,
+            "url": product_url,
+        }
+
+    return list(offers.values())
+
+
 def extract_product_title(soup, fallback):
     h1 = soup.find("h1")
     if h1:
@@ -756,6 +852,17 @@ def main():
             continue
 
         process_offer(source, result["price"], result["url"])
+
+    # Falabella Marketplace: descubre todas las publicaciones de Switch 2,
+    # no solo la ficha vendida directamente por Falabella.
+    try:
+        falabella_offers = fetch_falabella_marketplace_offers()
+    except Exception as exc:
+        print(f"[ERROR] Falabella Marketplace: {exc}")
+        falabella_offers = []
+
+    for offer in falabella_offers:
+        process_offer(offer, offer["price"], offer["url"])
 
     # Segunda capa: SoloTodo permite descubrir cambios en Paris, Ripley,
     # Lider, Hites y ABC sin depender de una URL fija para cada retailer.
