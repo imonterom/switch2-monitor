@@ -60,9 +60,9 @@
     "last_url": "https://bestmart.cl/collections/preventas-exclusivas-bestmart-chile/products/consola-nintendo-switch-2-the-legend-of-zelda-edicion-40-aniversario"
   },
   "zelda_mercadolibre": {
-    "available": true,
+    "available": false,
     "last_price": null,
-    "last_status": "PUBLICACIÓN ACTIVA",
+    "last_status": "SIN STOCK",
     "last_url": "https://www.mercadolibre.cl/nintendo-switch-2-the-legend-of-zelda-40th-anniversary-edition/p/MLC79375219"
   },
   "zelda_santogames": {
