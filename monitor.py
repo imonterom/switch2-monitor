@@ -663,20 +663,26 @@ def fetch_ripley_cyber_offers():
         if any(term in label_lower for term in ("oled", "lite", "bundle", "mario kart", "pokemon", "zelda")):
             continue
 
-        prices = extract_prices(label)
-        if not prices:
+        ordered_prices = extract_prices_in_order(label)
+        if not ordered_prices:
             continue
 
         product_url = canonical_product_url(urljoin(RIPLEY_CYBER_URL, anchor["href"]))
-        price = min(prices)
+        price_details = None
 
-        # Ripley suele mostrar: normal / internet / tarjeta. El menor valor
-        # corresponde a la mejor condición visible del card.
-        condition = "Mejor precio visible"
-        if len(prices) >= 3:
+        # Ripley muestra normalmente: precio normal / Internet / Tarjeta Ripley.
+        if len(ordered_prices) >= 3:
+            normal, internet, tarjeta = ordered_prices[0], ordered_prices[1], ordered_prices[2]
+            price = tarjeta
             condition = "Precio con Tarjeta Ripley"
-        elif len(prices) >= 2:
-            condition = "Precio Internet/promoción"
+            price_details = [
+                ("💳 Tarjeta Ripley", tarjeta),
+                ("🌐 Internet", internet),
+                ("🏷️ Precio normal", normal),
+            ]
+        else:
+            price = min(ordered_prices)
+            condition = "Mejor precio visible"
 
         offer_id = hashlib.sha1(product_url.encode("utf-8")).hexdigest()[:16]
         offers[product_url] = {
@@ -686,6 +692,7 @@ def fetch_ripley_cyber_offers():
             "kind": "standard",
             "price": price,
             "condition": condition,
+            "price_details": price_details,
             "url": product_url,
         }
 
