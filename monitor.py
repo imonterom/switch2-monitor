@@ -134,7 +134,15 @@ SOLOTODO_PRODUCTS = [
 
 # Tiendas grandes que agregamos mediante SoloTodo. Las demás ya se siguen
 # directamente en SOURCES para evitar alertas duplicadas.
-SOLOTODO_STORES = ("Paris", "Ripley", "Lider", "Hites", "ABC")
+SOLOTODO_STORES = (
+    "Falabella Marketplace",
+    "PC Factory",
+    "Paris",
+    "Ripley",
+    "Lider",
+    "Hites",
+    "ABC",
+)
 
 # Falabella funciona además como marketplace. Esta capa revisa el catálogo
 # completo para no perder ofertas de vendedores como Spice Mobile o Bestmart.
