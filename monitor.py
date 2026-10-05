@@ -368,6 +368,25 @@ def extract_primary_prices(source, soup, text):
     return extract_prices(text)
 
 
+def extract_prices_in_order(text):
+    matches = re.findall(
+        r"(?:CLP\s*)?\$\s*([0-9]{1,3}(?:[.\s][0-9]{3})+)",
+        text,
+        flags=re.I,
+    )
+    values = []
+    seen = set()
+    for raw in matches:
+        try:
+            value = int(re.sub(r"\D", "", raw))
+        except ValueError:
+            continue
+        if 450_000 <= value <= 1_200_000 and value not in seen:
+            seen.add(value)
+            values.append(value)
+    return values
+
+
 def extract_prices(text):
     # Detecta formatos chilenos típicos: $569.990, CLP$ 569.990, etc.
     matches = re.findall(r"(?:CLP\s*)?\$\s*([0-9]{1,3}(?:[.\s][0-9]{3})+)", text, flags=re.I)
@@ -391,6 +410,40 @@ def extract_direct_store_link(soup, fallback):
         if "ir a la tienda" in label or "ver oferta tienda" in label:
             return requests.compat.urljoin(fallback, anchor["href"])
     return fallback
+
+
+def extract_card_price_details(source, text):
+    ordered = extract_prices_in_order(text)
+    source_id = source.get("id", "")
+    url = source.get("url", "")
+
+    # Falabella: CMR / Internet / precio normal.
+    if "falabella.com" in url and len(ordered) >= 3:
+        cmr, internet, normal = ordered[0], ordered[1], ordered[2]
+        return {
+            "price": cmr,
+            "condition": "Precio con CMR",
+            "price_details": [
+                ("💳 CMR", cmr),
+                ("🌐 Internet", internet),
+                ("🏷️ Precio normal", normal),
+            ],
+        }
+
+    # Ripley: precio normal / Internet / Tarjeta Ripley.
+    if source_id == "ripley_standard_direct" and len(ordered) >= 3:
+        normal, internet, tarjeta = ordered[0], ordered[1], ordered[2]
+        return {
+            "price": tarjeta,
+            "condition": "Precio con Tarjeta Ripley",
+            "price_details": [
+                ("💳 Tarjeta Ripley", tarjeta),
+                ("🌐 Internet", internet),
+                ("🏷️ Precio normal", normal),
+            ],
+        }
+
+    return None
 
 
 def fetch_source(source):
@@ -420,18 +473,25 @@ def fetch_source(source):
         print(f"[SKIP] {source['store']}: producto agotado.")
         return None
 
-    prices = extract_primary_prices(source, soup, text)
-    if not prices:
-        raise RuntimeError("No se encontró un precio de consola válido.")
+    card_details = extract_card_price_details(source, text)
 
-    # En páginas de producto el menor valor plausible corresponde al precio efectivo/oferta,
-    # mientras que los valores superiores suelen ser precio normal/referencia.
-    price = min(prices)
+    if card_details:
+        price = card_details["price"]
+    else:
+        prices = extract_primary_prices(source, soup, text)
+        if not prices:
+            raise RuntimeError("No se encontró un precio de consola válido.")
+        price = min(prices)
 
-    return {
+    result = {
         "price": price,
         "url": extract_direct_store_link(soup, source["url"]),
     }
+    if card_details:
+        result["condition"] = card_details["condition"]
+        result["price_details"] = card_details["price_details"]
+
+    return result
 
 
 
@@ -861,17 +921,30 @@ def build_alert(source, price, url):
 
     kind_label = "BUNDLE" if source["kind"] == "bundle" else "CONSOLA"
     condition = source.get("condition")
-    condition_line = (
-        f"💳 {html.escape(condition)}\n"
-        if condition
-        else ""
-    )
+    price_details = source.get("price_details") or []
+
+    if price_details:
+        details_line = "".join(
+            f"{html.escape(label)}: <b>{format_clp(value)}</b>\n"
+            for label, value in price_details
+        )
+        price_block = (
+            f"🔥 Mejor precio para ti: <b>{format_clp(price)}</b>\n"
+            f"{details_line}"
+        )
+    else:
+        condition_line = (
+            f"💳 {html.escape(condition)}\n"
+            if condition
+            else ""
+        )
+        price_block = f"💰 <b>{format_clp(price)}</b>\n{condition_line}"
+
     return (
         f"🔥 <b>SWITCH 2 EN OFERTA</b>\n\n"
         f"🎮 <b>{html.escape(source['title'])}</b>\n"
         f"🏪 {html.escape(source['store'])}\n"
-        f"💰 <b>{format_clp(price)}</b>\n"
-        f"{condition_line}"
+        f"{price_block}"
         f"✅ {kind_label} bajo tu límite de {format_clp(limit)}\n"
         f"💸 {format_clp(saving)} por debajo de tu máximo\n\n"
         f"🔗 <a href=\"{html.escape(url, quote=True)}\">Ver oferta</a>"
@@ -942,7 +1015,12 @@ def main():
         if result is None:
             continue
 
-        process_offer(source, result["price"], result["url"])
+        enriched_source = dict(source)
+        if result.get("condition"):
+            enriched_source["condition"] = result["condition"]
+        if result.get("price_details"):
+            enriched_source["price_details"] = result["price_details"]
+        process_offer(enriched_source, result["price"], result["url"])
 
     # Falabella Marketplace: descubre todas las publicaciones de Switch 2,
     # no solo la ficha vendida directamente por Falabella.
