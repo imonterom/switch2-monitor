@@ -249,6 +249,12 @@ def send_telegram_to(chat_id, message):
         timeout=20,
     )
     response.raise_for_status()
+    payload = response.json()
+    result = payload.get("result", {})
+    print(
+        f"[TELEGRAM] enviado chat_id={result.get('chat', {}).get('id')} "
+        f"message_id={result.get('message_id')}"
+    )
 
 
 def send_telegram(message):
@@ -448,6 +454,8 @@ def fetch_solotodo_offers(product):
             continue
 
         price = min(prices)
+        # Ej.: "Paris Tarjeta Cencosud$549.990 Precio normal$569.990"
+        condition = label[len(store):].split("$", 1)[0].strip(" :-")
         offers.append(
             {
                 "id": f"{product['id']}_{slugify(store)}",
@@ -455,6 +463,7 @@ def fetch_solotodo_offers(product):
                 "title": product["title"],
                 "kind": product["kind"],
                 "price": price,
+                "condition": condition or None,
                 "url": normalize_solotodo_link(anchor["href"], product["url"]),
             }
         )
@@ -780,11 +789,18 @@ def build_alert(source, price, url):
     saving = limit - price
 
     kind_label = "BUNDLE" if source["kind"] == "bundle" else "CONSOLA"
+    condition = source.get("condition")
+    condition_line = (
+        f"💳 {html.escape(condition)}\n"
+        if condition
+        else ""
+    )
     return (
         f"🔥 <b>SWITCH 2 EN OFERTA</b>\n\n"
         f"🎮 <b>{html.escape(source['title'])}</b>\n"
         f"🏪 {html.escape(source['store'])}\n"
         f"💰 <b>{format_clp(price)}</b>\n"
+        f"{condition_line}"
         f"✅ {kind_label} bajo tu límite de {format_clp(limit)}\n"
         f"💸 {format_clp(saving)} por debajo de tu máximo\n\n"
         f"🔗 <a href=\"{html.escape(url, quote=True)}\">Ver oferta</a>"
@@ -800,14 +816,7 @@ def main():
             f"📦 Bundle: {format_clp(BUNDLE_LIMIT)} o menos\n"
             "🚫 Preventas y Zelda excluidos de tu alerta privada."
         )
-        send_telegram_to(
-            ZELDA_GROUP_ID,
-            "🗡️ <b>Prueba monitor Switch 2 Zelda</b>\n\n"
-            "Este grupo recibirá alertas de preventa, reposición o nueva disponibilidad "
-            "de la Nintendo Switch 2 The Legend of Zelda 40.º Aniversario.\n"
-            "🔗 Las alertas incluirán enlace directo a la publicación."
-        )
-        print("Notificaciones de prueba enviadas.")
+        print("Notificación de prueba privada enviada.")
         return
 
     state = load_state()
@@ -848,8 +857,11 @@ def main():
 
         new_state[source_id] = record
 
-    # Fuentes directas.
+    # Durante Cyber nos enfocamos exclusivamente en la consola Switch 2 normal.
+    # Zelda y bundles quedan temporalmente desactivados.
     for source in SOURCES:
+        if source.get("kind") != "standard":
+            continue
         try:
             result = fetch_source(source)
         except Exception as exc:
@@ -875,6 +887,8 @@ def main():
     # Segunda capa: SoloTodo permite descubrir cambios en Paris, Ripley,
     # Lider, Hites y ABC sin depender de una URL fija para cada retailer.
     for product in SOLOTODO_PRODUCTS:
+        if product.get("kind") != "standard":
+            continue
         try:
             offers = fetch_solotodo_offers(product)
         except Exception as exc:
@@ -888,7 +902,8 @@ def main():
         for offer in offers:
             process_offer(offer, offer["price"], offer["url"])
 
-    process_zelda_sources(state, new_state)
+    # Monitor Zelda desactivado temporalmente para concentrarnos en Switch 2 normal.
+    # process_zelda_sources(state, new_state)
 
     save_state(new_state)
 
