@@ -430,18 +430,47 @@ def extract_card_price_details(source, text):
             ],
         }
 
-    # Ripley: precio normal / Internet / Tarjeta Ripley.
-    if source_id == "ripley_standard_direct" and len(ordered) >= 3:
-        normal, internet, tarjeta = ordered[0], ordered[1], ordered[2]
-        return {
-            "price": tarjeta,
-            "condition": "Precio con Tarjeta Ripley",
-            "price_details": [
-                ("💳 Tarjeta Ripley", tarjeta),
-                ("🌐 Internet", internet),
-                ("🏷️ Precio normal", normal),
-            ],
-        }
+    # Ripley: usar SOLO precios que aparezcan explícitamente etiquetados
+    # en la ficha del producto. No inferir un precio de tarjeta por posición.
+    if source_id == "ripley_standard_direct":
+        def labeled_price(label_pattern):
+            match = re.search(
+                label_pattern + r".{0,80}?(?:CLP\s*)?\$\s*([0-9]{1,3}(?:[.\s][0-9]{3})+)",
+                text,
+                flags=re.I,
+            )
+            return normalize_price(match.group(1)) if match else None
+
+        normal = labeled_price(r"\bNormal\b")
+        internet = labeled_price(r"\bInternet\b")
+        tarjeta = labeled_price(r"(?:T\.\s*Cr[eé]dito|Tarjeta\s+Ripley)")
+
+        details = []
+        if tarjeta is not None:
+            details.append(("💳 Tarjeta Ripley", tarjeta))
+        if internet is not None:
+            details.append(("🌐 Internet", internet))
+        if normal is not None:
+            details.append(("🏷️ Precio normal", normal))
+
+        if tarjeta is not None:
+            return {
+                "price": tarjeta,
+                "condition": "Precio con Tarjeta Ripley",
+                "price_details": details,
+            }
+        if internet is not None:
+            return {
+                "price": internet,
+                "condition": "Precio Internet",
+                "price_details": details,
+            }
+        if normal is not None:
+            return {
+                "price": normal,
+                "condition": "Precio normal",
+                "price_details": details,
+            }
 
     return None
 
@@ -1072,17 +1101,9 @@ def main():
     for offer in falabella_offers:
         process_offer(offer, offer["price"], offer["url"])
 
-    # Ripley Cyber directo: captura precios Internet/Tarjeta Ripley que
-    # no siempre aparecen en SoloTodo.
-    try:
-        ripley_offers = fetch_ripley_cyber_offers()
-    except Exception as exc:
-        print(f"[ERROR] Ripley Cyber directo: {exc}")
-        ripley_offers = []
-
-    for offer in ripley_offers:
-        process_offer(offer, offer["price"], offer["url"])
-
+    # Ripley: para alertas usamos la ficha exacta del producto (SOURCES).
+    # El catálogo Cyber puede quedar desfasado respecto de la ficha y por eso
+    # no se usa para disparar alertas.
     # Segunda capa: SoloTodo permite descubrir cambios en Paris, Ripley,
     # Lider, Hites y ABC sin depender de una URL fija para cada retailer.
     for product in SOLOTODO_PRODUCTS:
