@@ -96,6 +96,14 @@ SOURCES = [
         "condition": "Mejor precio visible; revisa medio de pago",
     },
     {
+        "id": "comprai_switch2_backup",
+        "store": "Comprai / mejor precio Chile",
+        "title": "Nintendo Switch 2",
+        "kind": "standard",
+        "url": "https://www.comprai.cl/producto/nintendo-consola-nintendo-switch-2-uajn0",
+        "condition": "Comparador de tiendas; revisar tienda y medio de pago",
+    },
+    {
         "id": "falabella_choose_bundle",
         "store": "Falabella",
         "title": "Nintendo Switch 2 - Bundle",
