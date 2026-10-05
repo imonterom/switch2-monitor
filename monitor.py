@@ -80,6 +80,22 @@ SOURCES = [
         "required_text": "vendido por falabella",
     },
     {
+        "id": "falabella_spice_standard",
+        "store": "Falabella / Spice Mobile",
+        "title": "Nintendo Switch 2",
+        "kind": "standard",
+        "url": "https://www.falabella.com/falabella-cl/product/156544787/nintendo-switch-2-consola-de-videojuegos-hibrida/156544788",
+        "condition": "Precio Cyber Marketplace",
+    },
+    {
+        "id": "ripley_standard_direct",
+        "store": "Ripley",
+        "title": "Nintendo Switch 2",
+        "kind": "standard",
+        "url": "https://simple.ripley.cl/consola-nintendo-switch-2-2000406245874p",
+        "condition": "Mejor precio visible; revisa medio de pago",
+    },
+    {
         "id": "falabella_choose_bundle",
         "store": "Falabella",
         "title": "Nintendo Switch 2 - Bundle",
