@@ -150,6 +150,8 @@ FALABELLA_MARKETPLACE_URL = (
     "https://www.falabella.com/falabella-cl/shop/nintendo-switch-online"
 )
 
+RIPLEY_CYBER_URL = "https://simple.ripley.cl/tecno/nintendo?s=mdco&type=catalog"
+
 
 ZELDA_SOURCES = [
     {
@@ -561,6 +563,51 @@ def fetch_falabella_marketplace_offers():
     return list(offers.values())
 
 
+def fetch_ripley_cyber_offers():
+    response = requests.get(RIPLEY_CYBER_URL, headers=HEADERS, timeout=25)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    offers = {}
+
+    for anchor in soup.find_all("a", href=True):
+        label = " ".join(anchor.stripped_strings).strip()
+        label_lower = label.lower()
+
+        if "consola nintendo switch 2" not in label_lower:
+            continue
+        if any(term in label_lower for term in ("oled", "lite", "bundle", "mario kart", "pokemon", "zelda")):
+            continue
+
+        prices = extract_prices(label)
+        if not prices:
+            continue
+
+        product_url = canonical_product_url(urljoin(RIPLEY_CYBER_URL, anchor["href"]))
+        price = min(prices)
+
+        # Ripley suele mostrar: normal / internet / tarjeta. El menor valor
+        # corresponde a la mejor condición visible del card.
+        condition = "Mejor precio visible"
+        if len(prices) >= 3:
+            condition = "Precio con Tarjeta Ripley"
+        elif len(prices) >= 2:
+            condition = "Precio Internet/promoción"
+
+        offer_id = hashlib.sha1(product_url.encode("utf-8")).hexdigest()[:16]
+        offers[product_url] = {
+            "id": f"ripley_cyber_{offer_id}",
+            "store": "Ripley",
+            "title": "Nintendo Switch 2",
+            "kind": "standard",
+            "price": price,
+            "condition": condition,
+            "url": product_url,
+        }
+
+    return list(offers.values())
+
+
 def extract_product_title(soup, fallback):
     h1 = soup.find("h1")
     if h1:
@@ -882,6 +929,17 @@ def main():
         falabella_offers = []
 
     for offer in falabella_offers:
+        process_offer(offer, offer["price"], offer["url"])
+
+    # Ripley Cyber directo: captura precios Internet/Tarjeta Ripley que
+    # no siempre aparecen en SoloTodo.
+    try:
+        ripley_offers = fetch_ripley_cyber_offers()
+    except Exception as exc:
+        print(f"[ERROR] Ripley Cyber directo: {exc}")
+        ripley_offers = []
+
+    for offer in ripley_offers:
         process_offer(offer, offer["price"], offer["url"])
 
     # Segunda capa: SoloTodo permite descubrir cambios en Paris, Ripley,
