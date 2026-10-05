@@ -696,6 +696,38 @@ def fetch_ripley_cyber_offers():
             "url": product_url,
         }
 
+    # Fallback: algunas versiones del catálogo no ponen el texto completo
+    # dentro del <a>, pero sí lo dejan renderizado en el HTML general.
+    if not offers:
+        page_text = " ".join(soup.stripped_strings)
+        match = re.search(
+            r"NINTENDO\s+CONSOLA\s+NINTENDO\s+SWITCH\s+2.*?"
+            r"(?:CLP\s*)?\$\s*([0-9]{1,3}(?:[.\s][0-9]{3})+).*?"
+            r"(?:CLP\s*)?\$\s*([0-9]{1,3}(?:[.\s][0-9]{3})+).*?"
+            r"(?:CLP\s*)?\$\s*([0-9]{1,3}(?:[.\s][0-9]{3})+)",
+            page_text,
+            flags=re.I,
+        )
+        if match:
+            vals = [int(re.sub(r"\D", "", x)) for x in match.groups()]
+            if all(450_000 <= x <= 1_200_000 for x in vals):
+                normal, internet, tarjeta = vals
+                product_url = "https://simple.ripley.cl/consola-nintendo-switch-2-2000406245874p"
+                offers[product_url] = {
+                    "id": "ripley_cyber_fallback",
+                    "store": "Ripley",
+                    "title": "Nintendo Switch 2",
+                    "kind": "standard",
+                    "price": tarjeta,
+                    "condition": "Precio con Tarjeta Ripley",
+                    "price_details": [
+                        ("💳 Tarjeta Ripley", tarjeta),
+                        ("🌐 Internet", internet),
+                        ("🏷️ Precio normal", normal),
+                    ],
+                    "url": product_url,
+                }
+
     return list(offers.values())
 
 
